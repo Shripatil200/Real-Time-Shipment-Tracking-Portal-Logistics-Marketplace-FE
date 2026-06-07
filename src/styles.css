@@ -128,7 +128,6 @@ td b, td small { display: block; color: #173449; } td small { color: #8a9aa3; ma
   .readiness { flex-direction: column; }
   .form-card { position: static; }
 }
-
 /* ===== FleetFlow Enhanced Styles ===== */
 /* Append or replace the existing styles.css */
 
