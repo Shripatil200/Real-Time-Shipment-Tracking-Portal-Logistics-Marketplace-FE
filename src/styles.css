@@ -1,0 +1,49 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap");
+
+:root {
+  font-family: "DM Sans", sans-serif;
+  color: #12263a;
+  background: #f4f7f9;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+
+.auth-shell { min-height: 100vh; display: grid; grid-template-columns: 1.15fr .85fr; background: #071b2d; }
+.auth-story { color: white; padding: 64px clamp(36px, 8vw, 120px); display: flex; flex-direction: column; justify-content: center; position: relative; overflow: hidden; }
+.auth-story::after { content: ""; position: absolute; width: 520px; height: 520px; border: 1px solid #2e6780; border-radius: 50%; right: -250px; bottom: -180px; box-shadow: 0 0 0 70px rgba(51, 143, 161, .08), 0 0 0 140px rgba(51, 143, 161, .05); }
+.brand { display: flex; align-items: center; gap: 12px; font: 800 20px "Manrope"; }
+.brand span { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: #e96b3a; color: white; font-size: 14px; }
+.eyebrow { margin: 54px 0 12px; text-transform: uppercase; letter-spacing: .16em; font-size: 12px; font-weight: 700; color: #53b8c5; }
+.auth-story h1 { max-width: 720px; margin: 0; font: 800 clamp(42px, 5vw, 72px)/1.04 "Manrope"; letter-spacing: -.045em; }
+.lead { max-width: 600px; color: #abc0cd; font-size: 18px; line-height: 1.7; }
+.signal-row { display: flex; gap: 42px; margin-top: 48px; z-index: 1; }
+.signal-row div { display: flex; flex-direction: column; gap: 4px; }
+.signal-row strong { font: 700 20px "Manrope"; }
+.signal-row small { color: #829baa; }
+.auth-panel { display: grid; place-items: center; padding: 32px; background: #eef3f5; }
+.auth-card { width: min(440px, 100%); background: white; padding: 42px; border-radius: 24px; box-shadow: 0 24px 70px rgba(5, 30, 50, .12); }
+.auth-card .eyebrow { margin-top: 0; }
+.auth-card h2 { margin: 0 0 28px; font: 800 30px "Manrope"; letter-spacing: -.03em; }
+form { display: grid; gap: 18px; }
+label { display: grid; gap: 8px; font-size: 13px; font-weight: 700; color: #42566a; }
+input, select { width: 100%; border: 1px solid #d7e0e5; border-radius: 11px; padding: 13px 14px; background: #fbfcfd; color: #12263a; outline: none; }
+input:focus, select:focus { border-color: #2995a2; box-shadow: 0 0 0 3px rgba(41,149,162,.12); }
+.primary, .secondary { border: 0; border-radius: 11px; padding: 13px 18px; font-weight: 700; }
+.primary { background: #e96b3a; color: white; }
+.secondary { background: #e7eef2; color: #173449; }
+.text-button { border: 0; background: transparent; color: #277e8a; margin-top: 20px; padding: 0; }
+.error { margin: 0; color: #b74235; background: #fff0ed; padding: 10px 12px; border-radius: 9px; font-size: 13px; }
+.empty-state { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 14px; }
+
+@media (max-width: 820px) {
+  .auth-shell { grid-template-columns: 1fr; }
+  .auth-story { padding: 42px 28px 58px; }
+  .auth-story h1 { font-size: 42px; }
+  .signal-row { gap: 18px; flex-wrap: wrap; }
+  .auth-panel { padding: 24px 16px; }
+  .auth-card { padding: 28px; }
+}
