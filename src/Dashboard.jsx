@@ -16,24 +16,20 @@ const driverInitial = {
   shiftStart: "08:00", shiftEnd: "17:00", status: "AVAILABLE",
 };
 
-function getTabs(role) {
-  const base = [
-    ["overview",  "📊 Overview"],
-    ["map",       "🗺️ Live Map"],
-    ["vehicles",  "🚛 Vehicles"],
-    ["drivers",   "👤 Drivers"],
-    ["dispatch",  "📦 Dispatch"],
-    ["analytics", "📈 Analytics"],
-  ];
-  if (role === "ROLE_SHIPPER" || role === "ROLE_CARRIER") {
-    base.push(["shipments", "🤝 Shipments"]);
-  }
-  return base;
-}
+const TABS = [
+  ["overview",  "📊 Overview"],
+  ["map",       "🗺️ Live Map"],
+  ["vehicles",  "🚛 Vehicles"],
+  ["drivers",   "👤 Drivers"],
+  ["dispatch",  "📦 Dispatch"],
+  ["analytics", "📈 Analytics"],
+  ["shipments", "🤝 Shipments"],
+  ["profile",   "👤 Profile"],
+];
 
 export default function Dashboard({ session, onLogout }) {
-  const [tab, setTab]         = useState("overview");
-  const [summary, setSummary] = useState({});
+  const [tab, setTab]           = useState("overview");
+  const [summary, setSummary]   = useState({});
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers]   = useState([]);
   const [alerts, setAlerts]     = useState([]);
@@ -41,7 +37,10 @@ export default function Dashboard({ session, onLogout }) {
   const [driver, setDriver]     = useState(driverInitial);
   const [notice, setNotice]     = useState("");
 
-  const TABS = getTabs(session?.role);
+  // Assign driver modal
+  const [assignVehicleId, setAssignVehicleId] = useState(null);
+  const [assignDriverId, setAssignDriverId]   = useState("");
+  const [assignLoading, setAssignLoading]     = useState(false);
 
   async function refresh() {
     try {
@@ -105,8 +104,86 @@ export default function Dashboard({ session, onLogout }) {
     } catch (err) { setNotice(err.message); }
   }
 
+  async function confirmAssign() {
+    if (!assignDriverId) { setNotice("Please select a driver."); return; }
+    setAssignLoading(true);
+    try {
+      await api(`/fleet/vehicles/${assignVehicleId}/driver/${assignDriverId}`, { method: "PUT" });
+      const vPlate = vehicles.find(v => v.id === assignVehicleId)?.licensePlate;
+      const dName  = drivers.find(d => d.id === assignDriverId)?.name;
+      setNotice(`✓ ${dName} assigned to ${vPlate}.`);
+      setAssignVehicleId(null);
+      setAssignDriverId("");
+      refresh();
+    } catch (err) {
+      setNotice(err.message);
+    } finally {
+      setAssignLoading(false);
+    }
+  }
+
+  function copyId(id) {
+    navigator.clipboard.writeText(id)
+      .then(() => setNotice("Copied: " + id))
+      .catch(() => setNotice("Copy failed — ID: " + id));
+  }
+
   return (
     <div className="app-shell">
+
+      {/* Assign Driver Modal */}
+      {assignVehicleId && (
+        <div className="modal-overlay" onClick={() => setAssignVehicleId(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Assign Driver to Vehicle</h3>
+            <p className="modal-sub">
+              Vehicle: <b>{vehicles.find(v => v.id === assignVehicleId)?.licensePlate}</b>
+              {" — "}{vehicles.find(v => v.id === assignVehicleId)?.model}
+            </p>
+
+            <label style={{ marginTop: "1rem", display: "block" }}>
+              Select available driver
+              <select
+                value={assignDriverId}
+                onChange={(e) => setAssignDriverId(e.target.value)}
+                style={{ marginTop: "0.4rem", width: "100%" }}
+              >
+                <option value="">— choose a driver —</option>
+                {drivers
+                  .filter((d) => d.status === "AVAILABLE")
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.licenseNumber})
+                    </option>
+                  ))}
+              </select>
+            </label>
+
+            {drivers.filter(d => d.status === "AVAILABLE").length === 0 && (
+              <p className="modal-warn">
+                ⚠️ No available drivers right now. All are assigned or off duty.
+              </p>
+            )}
+
+            <div className="modal-actions">
+              <button
+                className="primary"
+                onClick={confirmAssign}
+                disabled={assignLoading || !assignDriverId}
+              >
+                {assignLoading ? "Assigning..." : "Confirm assign"}
+              </button>
+              <button
+                className="secondary"
+                onClick={() => { setAssignVehicleId(null); setAssignDriverId(""); }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <aside className="sidebar">
         <div className="brand"><span>FF</span> FleetFlow</div>
         <nav>
@@ -147,12 +224,13 @@ export default function Dashboard({ session, onLogout }) {
           <button className="notice" onClick={() => setNotice("")}>{notice}<b> ×</b></button>
         )}
 
+        {/* Overview */}
         {tab === "overview" && (
           <>
             <section className="metrics">
-              <Metric label="Total vehicles"  value={summary.totalVehicles ?? 0}   note={`${summary.availableVehicles ?? 0} available`} tone="navy" />
-              <Metric label="Active drivers"  value={summary.totalDrivers ?? 0}    note={`${summary.availableDrivers ?? 0} ready`}      tone="teal" />
-              <Metric label="Maintenance"     value={summary.maintenanceVehicles ?? 0} note="vehicles flagged"                         tone="orange" />
+              <Metric label="Total vehicles"  value={summary.totalVehicles ?? 0}       note={`${summary.availableVehicles ?? 0} available`} tone="navy" />
+              <Metric label="Active drivers"  value={summary.totalDrivers ?? 0}        note={`${summary.availableDrivers ?? 0} ready`}      tone="teal" />
+              <Metric label="Maintenance"     value={summary.maintenanceVehicles ?? 0} note="vehicles flagged"                              tone="orange" />
               {alerts.length > 0 && <Metric label="Open alerts" value={alerts.length} note="need attention" tone="red" />}
             </section>
 
@@ -176,7 +254,7 @@ export default function Dashboard({ session, onLogout }) {
               </div>
               <div className="card">
                 <CardTitle title="Recent vehicles" action={() => setTab("vehicles")} />
-                <Table rows={vehicles.slice(0, 5)} type="vehicle" />
+                <VehicleTable rows={vehicles.slice(0, 5)} onCopy={copyId} compact />
               </div>
             </section>
 
@@ -205,11 +283,16 @@ export default function Dashboard({ session, onLogout }) {
         {tab === "dispatch"  && <DispatchPanel vehicles={vehicles} drivers={drivers} />}
         {tab === "shipments" && <ShipmentBidPanel session={session} />}
 
+        {/* Vehicles */}
         {tab === "vehicles" && (
           <section className="data-layout">
             <div className="card">
               <CardTitle title="Vehicle registry" />
-              <Table rows={vehicles} type="vehicle" />
+              <VehicleTable
+                rows={vehicles}
+                onAssign={(vehicleId) => { setAssignVehicleId(vehicleId); setAssignDriverId(""); }}
+                onCopy={copyId}
+              />
             </div>
             <FormCard title="Register vehicle" onSubmit={addVehicle}>
               <label>License plate<input name="licensePlate" value={vehicle.licensePlate} onChange={update(setVehicle)} required /></label>
@@ -239,11 +322,12 @@ export default function Dashboard({ session, onLogout }) {
           </section>
         )}
 
+        {/* Drivers */}
         {tab === "drivers" && (
           <section className="data-layout">
             <div className="card">
               <CardTitle title="Driver roster" />
-              <Table rows={drivers} type="driver" />
+              <DriverTable rows={drivers} onCopy={copyId} />
             </div>
             <FormCard title="Add driver" onSubmit={addDriver}>
               <label>Full name<input name="name" value={driver.name} onChange={update(setDriver)} required /></label>
@@ -262,7 +346,115 @@ export default function Dashboard({ session, onLogout }) {
             </FormCard>
           </section>
         )}
+
+        {/* Profile */}
+        {tab === "profile" && (
+          <section className="card" style={{ maxWidth: "480px" }}>
+            <div className="card-title"><h2>Account profile</h2></div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", padding: "1rem 0" }}>
+              <ProfileRow label="Company" value={session.companyName} />
+              <ProfileRow label="Email"   value={session.email} />
+              <ProfileRow label="Role"    value={session.role?.replace("ROLE_", "")} />
+              <ProfileRow label="User ID" value={session.userId} mono />
+            </div>
+          </section>
+        )}
       </main>
+    </div>
+  );
+}
+
+// Vehicle table — shows Assign Driver button + copy ID
+function VehicleTable({ rows, onAssign, onCopy, compact }) {
+  if (!rows.length) return <div className="no-data">No records yet.</div>;
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Vehicle</th>
+            <th>Capacity</th>
+            <th>Status</th>
+            <th>Driver</th>
+            {!compact && <th style={{ width: "150px" }}>Actions</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <td><b>{row.licensePlate}</b><small>{row.model}</small></td>
+              <td>{row.capacityKg?.toLocaleString()} kg</td>
+              <td><Status value={row.status} /></td>
+              <td>
+                {row.driverName
+                  ? <span className="driver-assigned">✓ {row.driverName}</span>
+                  : <span className="driver-none">Unassigned</span>}
+              </td>
+              {!compact && (
+                <td>
+                  <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
+                    {onAssign && (
+                      <button
+                        className="secondary small"
+                        onClick={() => onAssign(row.id)}
+                        title="Assign a driver to this vehicle"
+                      >
+                        👤 Assign
+                      </button>
+                    )}
+                    <button
+                      className="icon-btn"
+                      onClick={() => onCopy(row.id)}
+                      title={"Copy ID: " + row.id}
+                    >
+                      📋
+                    </button>
+                  </div>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Driver table — shows copy ID button
+function DriverTable({ rows, onCopy }) {
+  if (!rows.length) return <div className="no-data">No records yet.</div>;
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Driver</th>
+            <th>License</th>
+            <th>Expiry</th>
+            <th>Status</th>
+            <th style={{ width: "50px" }}>ID</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <td><b>{row.name}</b><small>{row.email}</small></td>
+              <td>{row.licenseNumber}</td>
+              <td>{row.licenseExpiry}</td>
+              <td><Status value={row.status} /></td>
+              <td>
+                <button
+                  className="icon-btn"
+                  onClick={() => onCopy(row.id)}
+                  title={"Copy ID: " + row.id}
+                >
+                  📋
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -290,31 +482,14 @@ function FormCard({ title, onSubmit, children }) {
     </div>
   );
 }
-function Table({ rows, type }) {
-  if (!rows.length) return <div className="no-data">No records yet.</div>;
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            {type === "vehicle"
-              ? <><th>Vehicle</th><th>Capacity</th><th>Status</th><th>Driver</th></>
-              : <><th>Driver</th><th>License</th><th>Expiry</th><th>Status</th></>}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id}>
-              {type === "vehicle"
-                ? <><td><b>{row.licensePlate}</b><small>{row.model}</small></td><td>{row.capacityKg?.toLocaleString()} kg</td><td><Status value={row.status} /></td><td>{row.driverName || "Unassigned"}</td></>
-                : <><td><b>{row.name}</b><small>{row.email}</small></td><td>{row.licenseNumber}</td><td>{row.licenseExpiry}</td><td><Status value={row.status} /></td></>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 function Status({ value }) {
   return <span className={`status ${value?.toLowerCase().replace("_", "-")}`}>{value?.replaceAll("_", " ")}</span>;
+}
+function ProfileRow({ label, value, mono }) {
+  return (
+    <div style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
+      <span style={{ minWidth: "90px", color: "var(--text-muted)", fontSize: "0.85rem" }}>{label}</span>
+      <span style={{ fontFamily: mono ? "monospace" : "inherit", wordBreak: "break-all" }}>{value || "—"}</span>
+    </div>
+  );
 }

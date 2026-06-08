@@ -18,61 +18,17 @@ export default function LiveMap() {
   const [selected, setSelected] = useState(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [mapReady, setMapReady] = useState(false);
 
-  // Load all vehicles on mount
   async function loadVehicles() {
     try {
       const data = await api("/fleet/vehicles");
       setVehicles(data);
-      updateMarkers(data);
+      return data;
     } catch (err) {
       console.error("Failed to load vehicles:", err);
+      return [];
     }
-  }
-
-  // Connect to WebSocket for real-time GPS updates
-  function connectWebSocket() {
-    // SockJS + STOMP loaded from CDN in index.html
-    const SockJS = window.SockJS;
-    const Stomp = window.Stomp;
-    if (!SockJS || !Stomp) {
-      console.warn("SockJS/STOMP not loaded, falling back to polling");
-      const interval = setInterval(loadVehicles, 15000);
-      return () => clearInterval(interval);
-    }
-
-    const socket = new SockJS("http://localhost:8080/ws");
-    stompClient.current = Stomp.over(socket);
-    stompClient.current.debug = null; // suppress logs
-
-    stompClient.current.connect({}, () => {
-      setWsConnected(true);
-      // Subscribe to GPS updates
-      stompClient.current.subscribe("/topic/gps", (message) => {
-        const ping = JSON.parse(message.body);
-        setLastUpdate(new Date().toLocaleTimeString("en-IN"));
-
-        // Update the specific vehicle's marker on the map
-        setVehicles((prev) => {
-          const updated = prev.map((v) =>
-            v.id === ping.vehicleId
-              ? { ...v, latitude: ping.latitude, longitude: ping.longitude }
-              : v
-          );
-          updateMarkers(updated);
-          return updated;
-        });
-      });
-    }, (error) => {
-      setWsConnected(false);
-      console.warn("WebSocket disconnected, falling back to polling:", error);
-      // Fallback to polling every 15s
-      setTimeout(loadVehicles, 15000);
-    });
-
-    return () => {
-      if (stompClient.current) stompClient.current.disconnect();
-    };
   }
 
   function updateMarkers(vehicleList) {
@@ -109,7 +65,6 @@ export default function LiveMap() {
         markersRef.current[vehicle.id] = marker;
       }
     }
-    // Remove stale markers
     for (const id of Object.keys(markersRef.current)) {
       if (!seen.has(id)) {
         markersRef.current[id].remove();
@@ -118,6 +73,45 @@ export default function LiveMap() {
     }
   }
 
+  function connectWebSocket() {
+    const SockJS = window.SockJS;
+    const Stomp = window.Stomp;
+    if (!SockJS || !Stomp) {
+      console.warn("SockJS/STOMP not loaded, using polling");
+      return null;
+    }
+
+    try {
+      const socket = new SockJS("http://localhost:8080/ws");
+      const client = Stomp.over(socket);
+      client.debug = null;
+
+      client.connect({}, () => {
+        setWsConnected(true);
+        client.subscribe("/topic/gps", (message) => {
+          const ping = JSON.parse(message.body);
+          setLastUpdate(new Date().toLocaleTimeString("en-IN"));
+          setVehicles((prev) => {
+            const updated = prev.map((v) =>
+              v.id === ping.vehicleId
+                ? { ...v, latitude: ping.latitude, longitude: ping.longitude }
+                : v
+            );
+            updateMarkers(updated);
+            return updated;
+          });
+        });
+      }, () => {
+        setWsConnected(false);
+      });
+
+      stompClient.current = client;
+    } catch (e) {
+      console.warn("WebSocket connect failed:", e);
+    }
+  }
+
+  // Init map
   useEffect(() => {
     const L = window.L;
     if (!L || !mapRef.current || leafletMap.current) return;
@@ -126,18 +120,36 @@ export default function LiveMap() {
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "© OpenStreetMap contributors",
     }).addTo(leafletMap.current);
-
-    loadVehicles();
-    const cleanup = connectWebSocket();
+    setMapReady(true);
 
     return () => {
-      cleanup && cleanup();
+      // Safe disconnect — only if connected
+      if (stompClient.current) {
+        try {
+          if (stompClient.current.connected) {
+            stompClient.current.disconnect();
+          }
+        } catch (_) {}
+        stompClient.current = null;
+      }
       if (leafletMap.current) {
         leafletMap.current.remove();
         leafletMap.current = null;
       }
     };
   }, []);
+
+  // Load data and connect WS after map is ready
+  useEffect(() => {
+    if (!mapReady) return;
+    loadVehicles().then(updateMarkers);
+    connectWebSocket();
+    // Fallback polling every 20s
+    const interval = setInterval(() => {
+      loadVehicles().then(updateMarkers);
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [mapReady]);
 
   const vehiclesWithLocation = vehicles.filter(
     (v) => v.latitude != null && v.longitude != null
@@ -155,8 +167,8 @@ export default function LiveMap() {
             {wsConnected ? "🟢 WebSocket live" : "🟡 Polling mode"}
           </span>
           {lastUpdate && <span className="refresh-time">Last update: {lastUpdate}</span>}
-          <span className="count">{vehiclesWithLocation.length} vehicles</span>
-          <button className="secondary small" onClick={loadVehicles}>↻ Refresh</button>
+          <span className="count">{vehiclesWithLocation.length} vehicles tracked</span>
+          <button className="secondary small" onClick={() => loadVehicles().then(updateMarkers)}>↻ Refresh</button>
         </div>
       </div>
 
@@ -188,7 +200,7 @@ export default function LiveMap() {
             <div className="vehicle-list-mini">
               <p className="eyebrow">Click a marker to inspect</p>
               {vehiclesWithLocation.length === 0 ? (
-                <p className="no-data">No vehicles have GPS coordinates yet.</p>
+                <p className="no-data">No vehicles have GPS coordinates yet. Set lat/lng when registering a vehicle.</p>
               ) : (
                 vehiclesWithLocation.map((v) => (
                   <div key={v.id} className="vehicle-mini-row" onClick={() => setSelected(v)}>

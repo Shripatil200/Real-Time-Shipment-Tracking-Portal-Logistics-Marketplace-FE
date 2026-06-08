@@ -402,3 +402,96 @@ button.primary.small, button.secondary.small {
   font-size: 0.82rem;
 }
 .bid-row span { flex: 1; }
+
+/* ── Role hint in Auth form ─────────────────────────────────── */
+.role-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted, #94a3b8);
+  margin: -0.5rem 0 0.25rem;
+  line-height: 1.4;
+}
+
+/* ── Driver portal profile row ──────────────────────────────── */
+.driver-portal .role-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: #3b82f620;
+  color: #3b82f6;
+}
+
+/* ── Assign Driver Modal ────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+.modal-card {
+  background: var(--surface, #1e2533);
+  border: 1px solid var(--border, #2e3748);
+  border-radius: 14px;
+  padding: 2rem;
+  width: min(420px, 92vw);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+}
+.modal-card h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+.modal-sub {
+  font-size: 0.85rem;
+  color: var(--text-muted, #94a3b8);
+  margin: 0;
+}
+.modal-warn {
+  margin-top: 0.75rem;
+  font-size: 0.82rem;
+  color: #f59e0b;
+  background: #f59e0b18;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+}
+.modal-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+}
+
+/* ── Icon copy button ───────────────────────────────────────── */
+.icon-btn {
+  background: transparent;
+  border: 1px solid var(--border, #2e3748);
+  border-radius: 6px;
+  padding: 0.25rem 0.4rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  transition: background 0.15s;
+}
+.icon-btn:hover { background: var(--border, #2e3748); }
+
+/* ── Driver assignment status in table ─────────────────────── */
+.driver-assigned {
+  color: #22c55e;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+.driver-none {
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.82rem;
+}
+
+/* ── Role hint in Auth form ─────────────────────────────────── */
+.role-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted, #94a3b8);
+  margin: -0.5rem 0 0.25rem;
+  line-height: 1.4;
+}
