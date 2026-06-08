@@ -1,11 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 
-// We load Leaflet from CDN via a script tag in index.html
-// Add this to your index.html <head>:
-//   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-//   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 const STATUS_COLORS = {
   AVAILABLE: "#22c55e",
   IN_TRANSIT: "#3b82f6",
@@ -18,19 +13,66 @@ export default function LiveMap() {
   const mapRef = useRef(null);
   const leafletMap = useRef(null);
   const markersRef = useRef({});
+  const stompClient = useRef(null);
   const [vehicles, setVehicles] = useState([]);
   const [selected, setSelected] = useState(null);
-  const [lastRefresh, setLastRefresh] = useState(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState(null);
 
+  // Load all vehicles on mount
   async function loadVehicles() {
     try {
       const data = await api("/fleet/vehicles");
       setVehicles(data);
-      setLastRefresh(new Date().toLocaleTimeString());
       updateMarkers(data);
     } catch (err) {
-      console.error("Failed to load vehicle locations:", err);
+      console.error("Failed to load vehicles:", err);
     }
+  }
+
+  // Connect to WebSocket for real-time GPS updates
+  function connectWebSocket() {
+    // SockJS + STOMP loaded from CDN in index.html
+    const SockJS = window.SockJS;
+    const Stomp = window.Stomp;
+    if (!SockJS || !Stomp) {
+      console.warn("SockJS/STOMP not loaded, falling back to polling");
+      const interval = setInterval(loadVehicles, 15000);
+      return () => clearInterval(interval);
+    }
+
+    const socket = new SockJS("http://localhost:8080/ws");
+    stompClient.current = Stomp.over(socket);
+    stompClient.current.debug = null; // suppress logs
+
+    stompClient.current.connect({}, () => {
+      setWsConnected(true);
+      // Subscribe to GPS updates
+      stompClient.current.subscribe("/topic/gps", (message) => {
+        const ping = JSON.parse(message.body);
+        setLastUpdate(new Date().toLocaleTimeString("en-IN"));
+
+        // Update the specific vehicle's marker on the map
+        setVehicles((prev) => {
+          const updated = prev.map((v) =>
+            v.id === ping.vehicleId
+              ? { ...v, latitude: ping.latitude, longitude: ping.longitude }
+              : v
+          );
+          updateMarkers(updated);
+          return updated;
+        });
+      });
+    }, (error) => {
+      setWsConnected(false);
+      console.warn("WebSocket disconnected, falling back to polling:", error);
+      // Fallback to polling every 15s
+      setTimeout(loadVehicles, 15000);
+    });
+
+    return () => {
+      if (stompClient.current) stompClient.current.disconnect();
+    };
   }
 
   function updateMarkers(vehicleList) {
@@ -46,15 +88,14 @@ export default function LiveMap() {
       const icon = L.divIcon({
         className: "",
         html: `<div style="
-          width:32px;height:32px;border-radius:50%;
+          width:34px;height:34px;border-radius:50%;
           background:${color};border:3px solid white;
-          box-shadow:0 2px 8px rgba(0,0,0,0.35);
+          box-shadow:0 2px 8px rgba(0,0,0,.3);
           display:flex;align-items:center;justify-content:center;
-          font-weight:700;font-size:11px;color:white;
-          cursor:pointer;
-        ">${vehicle.licensePlate.slice(-3)}</div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 16],
+          font-weight:700;font-size:10px;color:white;cursor:pointer;
+        ">${(vehicle.licensePlate || "??").slice(-3)}</div>`,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
       });
 
       if (markersRef.current[vehicle.id]) {
@@ -68,8 +109,7 @@ export default function LiveMap() {
         markersRef.current[vehicle.id] = marker;
       }
     }
-
-    // Remove markers for deleted vehicles
+    // Remove stale markers
     for (const id of Object.keys(markersRef.current)) {
       if (!seen.has(id)) {
         markersRef.current[id].remove();
@@ -80,21 +120,18 @@ export default function LiveMap() {
 
   useEffect(() => {
     const L = window.L;
-    if (!L) {
-      console.warn("Leaflet not loaded. Add CDN links to index.html.");
-      return;
-    }
-    if (!mapRef.current || leafletMap.current) return;
+    if (!L || !mapRef.current || leafletMap.current) return;
 
-    leafletMap.current = L.map(mapRef.current).setView([20.5937, 78.9629], 5);
+    leafletMap.current = L.map(mapRef.current).setView([19.076, 72.877], 10);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "© OpenStreetMap contributors",
     }).addTo(leafletMap.current);
 
     loadVehicles();
-    const interval = setInterval(loadVehicles, 30_000);
+    const cleanup = connectWebSocket();
+
     return () => {
-      clearInterval(interval);
+      cleanup && cleanup();
       if (leafletMap.current) {
         leafletMap.current.remove();
         leafletMap.current = null;
@@ -114,27 +151,22 @@ export default function LiveMap() {
           <h2>Live Fleet Map</h2>
         </div>
         <div className="map-meta">
-          <span className="count">{vehiclesWithLocation.length} vehicles tracked</span>
-          {lastRefresh && (
-            <span className="refresh-time">Last refresh: {lastRefresh}</span>
-          )}
-          <button className="secondary small" onClick={loadVehicles}>
-            ↻ Refresh
-          </button>
+          <span className={`ws-badge ${wsConnected ? "connected" : "polling"}`}>
+            {wsConnected ? "🟢 WebSocket live" : "🟡 Polling mode"}
+          </span>
+          {lastUpdate && <span className="refresh-time">Last update: {lastUpdate}</span>}
+          <span className="count">{vehiclesWithLocation.length} vehicles</span>
+          <button className="secondary small" onClick={loadVehicles}>↻ Refresh</button>
         </div>
       </div>
 
       <div className="map-body">
         <div ref={mapRef} className="leaflet-container-box" />
-
         <aside className="map-sidebar">
           <div className="map-legend">
             {Object.entries(STATUS_COLORS).map(([status, color]) => (
               <div key={status} className="legend-row">
-                <span
-                  className="legend-dot"
-                  style={{ background: color }}
-                />
+                <span className="legend-dot" style={{ background: color }} />
                 {status.replace("_", " ")}
               </div>
             ))}
@@ -147,42 +179,23 @@ export default function LiveMap() {
                 <button onClick={() => setSelected(null)}>×</button>
               </div>
               <p><strong>Model:</strong> {selected.model}</p>
-              <p><strong>Status:</strong> {selected.status.replace("_", " ")}</p>
+              <p><strong>Status:</strong> {selected.status?.replace("_", " ")}</p>
               <p><strong>Capacity:</strong> {selected.capacityKg} kg</p>
-              {selected.driverName && (
-                <p><strong>Driver:</strong> {selected.driverName}</p>
-              )}
-              <p>
-                <strong>Location:</strong>{" "}
-                {selected.latitude?.toFixed(4)}, {selected.longitude?.toFixed(4)}
-              </p>
-              {selected.nextMaintenanceDate && (
-                <p>
-                  <strong>Next maintenance:</strong> {selected.nextMaintenanceDate}
-                </p>
-              )}
+              {selected.driverName && <p><strong>Driver:</strong> {selected.driverName}</p>}
+              <p><strong>Location:</strong> {selected.latitude?.toFixed(4)}, {selected.longitude?.toFixed(4)}</p>
             </div>
           ) : (
             <div className="vehicle-list-mini">
               <p className="eyebrow">Click a marker to inspect</p>
               {vehiclesWithLocation.length === 0 ? (
-                <p className="no-data">No vehicles have GPS coordinates set.</p>
+                <p className="no-data">No vehicles have GPS coordinates yet.</p>
               ) : (
                 vehiclesWithLocation.map((v) => (
-                  <div
-                    key={v.id}
-                    className="vehicle-mini-row"
-                    onClick={() => setSelected(v)}
-                  >
-                    <span
-                      className="legend-dot"
-                      style={{
-                        background: STATUS_COLORS[v.status] || "#6b7280",
-                      }}
-                    />
+                  <div key={v.id} className="vehicle-mini-row" onClick={() => setSelected(v)}>
+                    <span className="legend-dot" style={{ background: STATUS_COLORS[v.status] || "#6b7280" }} />
                     <div>
                       <strong>{v.licensePlate}</strong>
-                      <small>{v.status.replace("_", " ")}</small>
+                      <small>{v.status?.replace("_", " ")}</small>
                     </div>
                   </div>
                 ))
