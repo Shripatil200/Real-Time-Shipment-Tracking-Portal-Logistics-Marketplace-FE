@@ -20,10 +20,19 @@ export default function Auth({ onLogin }) {
     setLoading(true);
     setError("");
     try {
-      const payload =
-        mode === "login"
-          ? { email: form.email, password: form.password }
-          : form;
+      let payload;
+      if (mode === "login") {
+        payload = { email: form.email, password: form.password };
+      } else {
+        // BUG FIX: send role explicitly so backend stores the correct role
+        payload = {
+          email: form.email,
+          password: form.password,
+          companyName: form.companyName,
+          role: form.role,
+        };
+      }
+
       const session = await api(`/auth/${mode}`, {
         method: "POST",
         body: JSON.stringify(payload),
@@ -36,6 +45,13 @@ export default function Auth({ onLogin }) {
       setLoading(false);
     }
   }
+
+  // Human-readable label for each role
+  const ROLE_LABELS = {
+    ROLE_SHIPPER: "Fleet Dispatcher — manage vehicles, drivers & routes",
+    ROLE_CARRIER: "Carrier — browse shipments and place bids",
+    ROLE_DRIVER:  "Driver — view assigned stops and update status",
+  };
 
   return (
     <main className="auth-shell">
@@ -58,12 +74,15 @@ export default function Auth({ onLogin }) {
         <div className="auth-card">
           <p className="eyebrow">{mode === "login" ? "Welcome back" : "Create workspace"}</p>
           <h2>{mode === "login" ? "Sign in" : "Create account"}</h2>
+
           <form onSubmit={submit}>
             {mode === "register" && (
               <>
                 <label>Company / Full name
                   <input name="companyName" value={form.companyName} onChange={update} required />
                 </label>
+
+                {/* BUG FIX: show role selector with clear descriptions */}
                 <label>Account type
                   <select name="role" value={form.role} onChange={update}>
                     <option value="ROLE_SHIPPER">Fleet Dispatcher</option>
@@ -71,20 +90,37 @@ export default function Auth({ onLogin }) {
                     <option value="ROLE_DRIVER">Driver</option>
                   </select>
                 </label>
+
+                {/* Show what this role can do */}
+                <p className="role-hint">{ROLE_LABELS[form.role]}</p>
               </>
             )}
+
             <label>Email address
               <input type="email" name="email" value={form.email} onChange={update} required />
             </label>
             <label>Password
-              <input type="password" name="password" minLength="8" value={form.password} onChange={update} required />
+              <input
+                type="password"
+                name="password"
+                minLength="8"
+                value={form.password}
+                onChange={update}
+                required
+              />
             </label>
+
             {error && <p className="error">{error}</p>}
+
             <button className="primary" disabled={loading}>
               {loading ? "Working..." : mode === "login" ? "Sign in" : "Create account"}
             </button>
           </form>
-          <button className="text-button" onClick={() => setMode(mode === "login" ? "register" : "login")}>
+
+          <button
+            className="text-button"
+            onClick={() => setMode(mode === "login" ? "register" : "login")}
+          >
             {mode === "login" ? "Need an account? Register" : "Already registered? Sign in"}
           </button>
         </div>
