@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, saveSession } from "./api";
 
-export default function Auth({ onAuthenticated }) {
+export default function Auth({ onLogin }) {
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({
     email: "",
@@ -12,11 +12,11 @@ export default function Auth({ onAuthenticated }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const update = (event) =>
-    setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
+  const update = (e) =>
+    setForm((curr) => ({ ...curr, [e.target.name]: e.target.value }));
 
-  async function submit(event) {
-    event.preventDefault();
+  async function submit(e) {
+    e.preventDefault();
     setLoading(true);
     setError("");
     try {
@@ -29,9 +29,9 @@ export default function Auth({ onAuthenticated }) {
         body: JSON.stringify(payload),
       });
       saveSession(session);
-      onAuthenticated(session);
-    } catch (requestError) {
-      setError(requestError.message);
+      onLogin(session);
+    } catch (err) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -48,29 +48,37 @@ export default function Auth({ onAuthenticated }) {
           efficient route in seconds.
         </p>
         <div className="signal-row">
-          <div><strong>Live</strong><small>fleet visibility</small></div>
-          <div><strong>10 stops</strong><small>per optimized route</small></div>
-          <div><strong>OSRM</strong><small>distance intelligence</small></div>
+          <div><strong>Live GPS</strong><small>real-time tracking</small></div>
+          <div><strong>2-opt TSP</strong><small>route optimization</small></div>
+          <div><strong>WebSocket</strong><small>instant map updates</small></div>
         </div>
       </section>
+
       <section className="auth-panel">
         <div className="auth-card">
           <p className="eyebrow">{mode === "login" ? "Welcome back" : "Create workspace"}</p>
-          <h2>{mode === "login" ? "Sign in to dispatch" : "Start managing your fleet"}</h2>
+          <h2>{mode === "login" ? "Sign in" : "Create account"}</h2>
           <form onSubmit={submit}>
             {mode === "register" && (
               <>
-                <label>Company name<input name="companyName" value={form.companyName} onChange={update} required /></label>
+                <label>Company / Full name
+                  <input name="companyName" value={form.companyName} onChange={update} required />
+                </label>
                 <label>Account type
                   <select name="role" value={form.role} onChange={update}>
-                    <option value="ROLE_SHIPPER">Fleet dispatcher</option>
+                    <option value="ROLE_SHIPPER">Fleet Dispatcher</option>
                     <option value="ROLE_CARRIER">Carrier</option>
+                    <option value="ROLE_DRIVER">Driver</option>
                   </select>
                 </label>
               </>
             )}
-            <label>Email address<input type="email" name="email" value={form.email} onChange={update} required /></label>
-            <label>Password<input type="password" name="password" minLength="8" value={form.password} onChange={update} required /></label>
+            <label>Email address
+              <input type="email" name="email" value={form.email} onChange={update} required />
+            </label>
+            <label>Password
+              <input type="password" name="password" minLength="8" value={form.password} onChange={update} required />
+            </label>
             {error && <p className="error">{error}</p>}
             <button className="primary" disabled={loading}>
               {loading ? "Working..." : mode === "login" ? "Sign in" : "Create account"}
